@@ -1,0 +1,61 @@
+package com.rena.springsecuritydemo.security;
+
+import jakarta.servlet.FilterChain;
+import jakarta.servlet.ServletException;
+import jakarta.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpServletResponse;
+import lombok.NonNull;
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.security.core.userdetails.UserDetails;
+import org.springframework.security.core.userdetails.UserDetailsService;
+import org.springframework.security.web.authentication.WebAuthenticationDetailsSource;
+import org.springframework.stereotype.Component;
+import org.springframework.web.filter.OncePerRequestFilter;
+
+import java.io.IOException;
+
+@Slf4j
+@Component
+@RequiredArgsConstructor
+public class JwtAuthenticationFilter extends OncePerRequestFilter {
+    private final JwtService jwtService;
+    private final UserDetailsService userDetailsService;
+    @Override
+    protected void doFilterInternal(@NonNull HttpServletRequest request,
+                                    @NonNull HttpServletResponse response,
+                                    @NonNull FilterChain filterChain) throws ServletException, IOException
+    {
+
+        String authHeader = request.getHeader("Authorization");
+        String token;
+        String userEmail;
+
+        if(authHeader == null || !authHeader.startsWith("Bearer ")){
+            filterChain.doFilter(request,response);
+            return;
+        }
+        token = authHeader.substring(7);
+        userEmail = jwtService.extractUsername(token);
+        log.info("User Email ----->{}", userEmail );
+        log.info("Token ----->{}", token );
+        if(userEmail != null && SecurityContextHolder.getContext().getAuthentication() == null){
+            log.info("---------> Here am I");
+            UserDetails userDetails = this.userDetailsService.loadUserByUsername(userEmail);
+            log.info("---------> Here am I again");
+            log.info("User details ----->{}", userDetails );
+            if(jwtService.isTokenValid(token, userDetails)){
+                UsernamePasswordAuthenticationToken authToken = new UsernamePasswordAuthenticationToken(
+                        userDetails, null, userDetails.getAuthorities()
+                );
+                authToken.setDetails(new WebAuthenticationDetailsSource().buildDetails(request)
+                );
+                SecurityContextHolder.getContext().setAuthentication(authToken);
+            }
+
+        }
+        filterChain.doFilter(request, response);
+    }
+}
